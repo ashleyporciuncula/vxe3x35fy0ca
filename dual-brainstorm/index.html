@@ -195,10 +195,54 @@ kbd { font: 600 11px/1 var(--body); border: 1px solid currentColor; border-radiu
     }
     return listCache[id];
   }
-  // TODO: IMDb does not let a web page read its list pages directly.
-  // This is where the list's title IDs get fetched once a way in is chosen.
+  // IMDb doesn't let a web page read its list pages directly, so the page is
+  // fetched through a public relay. Relays come and go; each is tried in turn.
+  var RELAYS = [
+    function (u) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(u); },
+    function (u) { return "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u); },
+    function (u) { return "https://thingproxy.freeboard.io/fetch/" + u; }
+  ];
+  function viaRelay(url, i) {
+    i = i || 0;
+    if (i >= RELAYS.length) return Promise.reject(new Error("list-unreadable"));
+    var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, 8000);
+    return fetch(RELAYS[i](url), { signal: ctl.signal, cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("relay " + r.status); return r.text(); })
+      .then(function (html) {
+        clearTimeout(timer);
+        var ids = idsFromListPage(html);
+        if (!ids.length) throw new Error("no titles");   // blocked or a challenge page
+        return ids;
+      })
+      .catch(function () { clearTimeout(timer); return viaRelay(url, i + 1); });
+  }
+  function idsFromListPage(html) {
+    var scope = html, m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    if (m) {
+      var start = m[1].indexOf("titleListItemSearch");
+      scope = start >= 0 ? m[1].slice(start) : m[1];
+    }
+    var seen = {}, out = [];
+    (scope.match(/tt\d{7,9}/g) || []).forEach(function (t) { if (!seen[t]) { seen[t] = 1; out.push(t); } });
+    return out;
+  }
   function readImdbList(id) {
-    return Promise.reject(new Error("list-unreadable"));
+    var base = "https://www.imdb.com/list/" + id + "/";
+    return viaRelay(base).then(function (first) {
+      // Long lists come in pages; follow up to 10 of them.
+      if (first.length < 100) return first;
+      var all = first.slice(), seen = {};
+      all.forEach(function (t) { seen[t] = 1; });
+      function next(p) {
+        if (p > 10) return all;
+        return viaRelay(base + "?page=" + p).then(function (ids) {
+          var fresh = ids.filter(function (t) { return !seen[t] && (seen[t] = 1); });
+          if (!fresh.length) return all;
+          all = all.concat(fresh); return next(p + 1);
+        }, function () { return all; });
+      }
+      return next(2);
+    });
   }
 
   function titlePool() {
@@ -250,7 +294,8 @@ kbd { font: 600 11px/1 var(--body); border: 1px solid currentColor; border-radiu
     titlePool().then(function (pool) {
       if (my !== ticket) return;
       $("rightCount").textContent = pool.ids.length ? pool.ids.length + " titles" : "";
-      var note = pool.errors.length ? "Couldn't read " + pool.errors.length + " list link" + (pool.errors.length > 1 ? "s" : "") + " from IMDb." : "";
+      var note = pool.errors.length ? "Couldn't read " + pool.errors.length + " list link" + (pool.errors.length > 1 ? "s" : "") +
+        ". The public relays couldn't reach IMDb; reload the page later to try again." : "";
       if (!pool.ids.length) { $("poster").className = "poster"; $("poster").textContent = "No titles to draw from"; $("film").innerHTML = ""; setStatus(note, true); return; }
       var choices = pool.ids.length > 1 ? pool.ids.filter(function (i) { return i !== lastTitle; }) : pool.ids;
       var tt = choices[randInt(choices.length)]; lastTitle = tt;
