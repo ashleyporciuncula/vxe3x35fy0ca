@@ -195,8 +195,10 @@ kbd { font: 600 11px/1 var(--body); border: 1px solid currentColor; border-radiu
     }
     return listCache[id];
   }
-  // IMDb doesn't let a web page read its list pages directly, so the page is
-  // fetched through a public relay. Relays come and go; each is tried in turn.
+  // IMDb doesn't let a web page read its list pages directly, so lists go through a relay.
+  // Your own Cloudflare Worker (see worker/README.md) comes first; paste its address here.
+  var WORKER_URL = "";
+  // If that's blank or fails, these public relays are tried in turn. They come and go.
   var RELAYS = [
     function (u) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(u); },
     function (u) { return "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u); },
@@ -227,6 +229,18 @@ kbd { font: 600 11px/1 var(--body); border: 1px solid currentColor; border-radiu
     return out;
   }
   function readImdbList(id) {
+    if (!WORKER_URL) return readViaPublicRelays(id);
+    var ctl = new AbortController(), timer = setTimeout(function () { ctl.abort(); }, 20000);
+    return fetch(WORKER_URL.replace(/\/+$/, "") + "/?list=" + id, { signal: ctl.signal, cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        clearTimeout(timer);
+        if (!data.ids || !data.ids.length) throw new Error(data.error || "empty");
+        return data.ids;
+      })
+      .catch(function () { clearTimeout(timer); return readViaPublicRelays(id); });
+  }
+  function readViaPublicRelays(id) {
     var base = "https://www.imdb.com/list/" + id + "/";
     return viaRelay(base).then(function (first) {
       // Long lists come in pages; follow up to 10 of them.
@@ -295,7 +309,7 @@ kbd { font: 600 11px/1 var(--body); border: 1px solid currentColor; border-radiu
       if (my !== ticket) return;
       $("rightCount").textContent = pool.ids.length ? pool.ids.length + " titles" : "";
       var note = pool.errors.length ? "Couldn't read " + pool.errors.length + " list link" + (pool.errors.length > 1 ? "s" : "") +
-        ". The public relays couldn't reach IMDb; reload the page later to try again." : "";
+        ". IMDb didn't answer through the relay; reload the page later to try again." : "";
       if (!pool.ids.length) { $("poster").className = "poster"; $("poster").textContent = "No titles to draw from"; $("film").innerHTML = ""; setStatus(note, true); return; }
       var choices = pool.ids.length > 1 ? pool.ids.filter(function (i) { return i !== lastTitle; }) : pool.ids;
       var tt = choices[randInt(choices.length)]; lastTitle = tt;
