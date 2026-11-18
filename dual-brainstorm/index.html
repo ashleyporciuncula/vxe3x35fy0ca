@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dual Brainstorm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&display=swap">
+<script>
+  // Apply the saved theme before paint.
+  try { var t = localStorage.getItem("dualBrainstorm.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
+<style>
+/* Layout: one control bar, then two equal columns. Each column is an input box above its draw. */
+:root {
+  --bg: #f3f2f7; --panel: #ffffff; --ink: #1d1b26; --muted: #6b6878; --line: #dcdae5;
+  --accent: #5b3fd6; --accent-ink: #ffffff; --chip: #ece8fb; --warn: #b4441f;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15141b; --panel: #1f1e27; --ink: #ecebf3; --muted: #9c99ab; --line: #33313f;
+    --accent: #9b86ff; --accent-ink: #15141b; --chip: #2b2740; --warn: #f08a63; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15141b; --panel: #1f1e27; --ink: #ecebf3; --muted: #9c99ab; --line: #33313f;
+  --accent: #9b86ff; --accent-ink: #15141b; --chip: #2b2740; --warn: #f08a63; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body);
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+h1 { font: 700 clamp(24px, 4vw, 32px)/1.1 var(--display); margin: 0; letter-spacing: -0.01em; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.controls label { font-size: 14px; color: var(--muted); }
+.panes { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 760px) { .panes { grid-template-columns: 1fr; } }
+.pane { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.pane-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pane-head label { font: 700 18px/1.2 var(--display); color: var(--ink); }
+.count { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+textarea, input[type=number] {
+  width: 100%; font: 14px/1.5 var(--body); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+}
+textarea { min-height: 150px; resize: vertical; }
+input[type=number] { width: 76px; font-variant-numeric: tabular-nums; }
+textarea:focus, input:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button {
+  font: 600 14px/1 var(--body); border-radius: 10px; padding: 11px 16px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+kbd { font: 600 11px/1 var(--body); border: 1px solid currentColor; border-radius: 4px; padding: 2px 5px; margin-left: 6px; opacity: .75; }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+.out { border-top: 1px solid var(--line); padding-top: 14px; min-height: 120px; }
+
+.picks { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.picks li { background: var(--chip); border-radius: 999px; padding: 8px 15px; font: 500 17px/1.3 var(--display); animation: pop .3s ease both; }
+@keyframes pop { from { transform: scale(.88); opacity: .2 } to { transform: none; opacity: 1 } }
+
+.stage { display: grid; justify-items: center; gap: 10px; }
+.poster {
+  width: min(300px, 100%); aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden;
+  background: var(--chip); display: grid; place-items: center; color: var(--muted); font-size: 14px; text-align: center; padding: 12px;
+}
+.poster.has-img { padding: 0; }
+.poster img { width: 100%; height: 100%; object-fit: cover; display: block; animation: pop .35s ease both; }
+.film { text-align: center; }
+.film a { color: var(--ink); font: 700 18px/1.25 var(--display); text-decoration: none; }
+.film a:hover { text-decoration: underline; }
+.film .meta { color: var(--muted); font-size: 13px; }
+.status { font-size: 13px; color: var(--muted); margin: 0; text-align: center; }
+.status.err { color: var(--warn); }
+@media (prefers-reduced-motion: reduce) { .picks li, .poster img { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Dual Brainstorm</h1>
+    <div class="controls">
+      <label for="pickN">Show</label>
+      <input type="number" id="pickN" min="1" value="7">
+      <button id="reroll" class="primary">Re-roll<kbd>Space</kbd></button>
+      <button id="theme" aria-label="Switch theme"></button>
+    </div>
+  </header>
+
+  <div class="panes">
+    <section class="pane">
+      <div class="pane-head">
+        <label for="items">Things</label>
+        <span class="count" id="leftCount"></span>
+      </div>
+      <textarea id="items" spellcheck="false" placeholder="One thing per line"></textarea>
+      <div class="out"><ul class="picks" id="picks" aria-live="polite"></ul></div>
+    </section>
+
+    <section class="pane">
+      <div class="pane-head">
+        <label for="lists">IMDb lists</label>
+        <span class="count" id="rightCount"></span>
+      </div>
+      <textarea id="lists" spellcheck="false" placeholder="One IMDb link per line, e.g.&#10;https://www.imdb.com/list/ls055592025/&#10;https://www.imdb.com/title/tt0111161/"></textarea>
+      <div class="out stage">
+        <div class="poster" id="poster">Add an IMDb link to draw a poster</div>
+        <div class="film" id="film"></div>
+        <p class="status" id="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </div>
+  <p class="hint">Your entries are remembered in this browser only. Lists are read fresh from IMDb every time you open the page.</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var mem = {
+    get: function (k, d) { try { var v = localStorage.getItem("dualBrainstorm." + k); return v === null ? d : v; } catch (e) { return d; } },
+    set: function (k, v) { try { if (v === null) localStorage.removeItem("dualBrainstorm." + k); else localStorage.setItem("dualBrainstorm." + k, v); } catch (e) {} }
+  };
+
+  // ---------- theme ----------
+  var themeBtn = $("theme");
+  function currentTheme() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t) return t;
+    return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function paintThemeBtn() { themeBtn.textContent = currentTheme() === "dark" ? "Light mode" : "Dark mode"; }
+  themeBtn.addEventListener("click", function () {
+    var next = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next); mem.set("theme", next); paintThemeBtn();
+  });
+  paintThemeBtn();
+
+  // ---------- randomness ----------
+  function randInt(n) {
+    var buf = new Uint32Array(1), limit = Math.floor(0x100000000 / n) * n, x;
+    do { crypto.getRandomValues(buf); x = buf[0]; } while (x >= limit);
+    return x % n;
+  }
+  function sample(arr, k) {
+    var a = arr.slice(), n = a.length; k = Math.min(k, n);
+    for (var i = 0; i < k; i++) { var j = i + randInt(n - i), t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a.slice(0, k);
+  }
+
+  // ---------- remembered entries ----------
+  var itemsEl = $("items"), listsEl = $("lists"), pickN = $("pickN");
+  itemsEl.value = mem.get("items", "");
+  listsEl.value = mem.get("lists", "");
+  pickN.value = mem.get("pickN", "7");
+
+  // ---------- left: things ----------
+  function things() {
+    var seen = {};
+    return itemsEl.value.split(/\r?\n/).map(function (s) { return s.trim(); })
+      .filter(function (s) { var k = s.toLowerCase(); return s && !seen[k] && (seen[k] = 1); });
+  }
+  function drawLeft() {
+    var all = things(), ul = $("picks"), k = Math.max(1, parseInt(pickN.value, 10) || 1);
+    $("leftCount").textContent = all.length ? "showing " + Math.min(k, all.length) + " of " + all.length : "";
+    ul.innerHTML = "";
+    if (!all.length) { ul.innerHTML = '<li style="background:none;padding:0;font:14px var(--body);color:var(--muted)">Add things on separate lines above.</li>'; return; }
+    sample(all, k).forEach(function (s) { var li = document.createElement("li"); li.textContent = s; ul.appendChild(li); });
+  }
+
+  // ---------- right: IMDb ----------
+  // Each line is a list link (ls…) or a single title link/ID (tt…).
+  function sources() {
+    var out = [], seen = {};
+    listsEl.value.split(/\r?\n/).forEach(function (line) {
+      var ls = line.match(/ls\d{6,}/), tt = line.match(/tt\d{7,9}/);
+      var key = ls ? ls[0] : tt ? tt[0] : null;
+      if (key && !seen[key]) { seen[key] = 1; out.push(ls ? { list: ls[0] } : { title: tt[0] }); }
+    });
+    return out;
+  }
+
+  // Lists are read once per page load and kept in memory only.
+  var listCache = {};
+  function fetchList(id) {
+    if (!listCache[id]) {
+      listCache[id] = readImdbList(id).catch(function (e) { delete listCache[id]; throw e; });
+    }
+    return listCache[id];
+  }
+  // TODO: IMDb does not let a web page read its list pages directly.
+  // This is where the list's title IDs get fetched once a way in is chosen.
+  function readImdbList(id) {
+    return Promise.reject(new Error("list-unreadable"));
+  }
+
+  function titlePool() {
+    var src = sources(), errors = [];
+    return Promise.all(src.map(function (s) {
+      if (s.title) return [s.title];
+      return fetchList(s.list).catch(function (e) { errors.push(s.list); return []; });
+    })).then(function (groups) {
+      var seen = {}, ids = [];
+      groups.forEach(function (g) { g.forEach(function (i) { if (!seen[i]) { seen[i] = 1; ids.push(i); } }); });
+      return { ids: ids, errors: errors, sources: src.length };
+    });
+  }
+
+  // Poster lookup: IMDb's suggestion service answers as JSONP, which any page can load.
+  var titleCache = {};
+  function lookupTitle(tt) {
+    if (titleCache[tt]) return titleCache[tt];
+    titleCache[tt] = new Promise(function (resolve, reject) {
+      var cb = "imdb$" + tt, s = document.createElement("script"), done = false;
+      var timer = setTimeout(function () { finish(null, new Error("timeout")); }, 9000);
+      function finish(data, err) {
+        if (done) return; done = true; clearTimeout(timer);
+        try { delete window[cb]; } catch (e) { window[cb] = undefined; }
+        s.remove();
+        if (err) { delete titleCache[tt]; reject(err); return; }
+        var hit = ((data && data.d) || []).filter(function (r) { return r.id === tt; })[0];
+        hit ? resolve(hit) : reject(new Error("notfound"));
+      }
+      window[cb] = function (data) { finish(data); };
+      s.onerror = function () { finish(null, new Error("network")); };
+      s.src = "https://sg.media-imdb.com/suggests/t/" + tt + ".json";
+      document.head.appendChild(s);
+    });
+    return titleCache[tt];
+  }
+
+  var ticket = 0, lastTitle = null;
+  function setStatus(msg, isErr) { var el = $("status"); el.textContent = msg || ""; el.className = "status" + (isErr ? " err" : ""); }
+  function drawRight() {
+    var my = ++ticket;
+    var src = sources();
+    if (!src.length) {
+      $("rightCount").textContent = "";
+      $("poster").className = "poster"; $("poster").textContent = "Add an IMDb link to draw a poster";
+      $("film").innerHTML = ""; setStatus(""); return;
+    }
+    setStatus("Reading IMDb…");
+    titlePool().then(function (pool) {
+      if (my !== ticket) return;
+      $("rightCount").textContent = pool.ids.length ? pool.ids.length + " titles" : "";
+      var note = pool.errors.length ? "Couldn't read " + pool.errors.length + " list link" + (pool.errors.length > 1 ? "s" : "") + " from IMDb." : "";
+      if (!pool.ids.length) { $("poster").className = "poster"; $("poster").textContent = "No titles to draw from"; $("film").innerHTML = ""; setStatus(note, true); return; }
+      var choices = pool.ids.length > 1 ? pool.ids.filter(function (i) { return i !== lastTitle; }) : pool.ids;
+      var tt = choices[randInt(choices.length)]; lastTitle = tt;
+      return lookupTitle(tt).then(function (hit) {
+        if (my !== ticket) return;
+        var poster = $("poster"), film = $("film");
+        poster.innerHTML = "";
+        if (hit.i && hit.i[0]) {
+          poster.className = "poster has-img";
+          var img = new Image(); img.alt = "Poster for " + hit.l;
+          img.src = hit.i[0].replace(/\._V1_.*\.jpg$/, "._V1_SX600.jpg");
+          poster.appendChild(img);
+        } else { poster.className = "poster"; poster.textContent = "IMDb has no poster for this title"; }
+        film.innerHTML = "";
+        var a = document.createElement("a");
+        a.href = "https://www.imdb.com/title/" + hit.id + "/"; a.target = "_blank"; a.rel = "noopener"; a.textContent = hit.l;
+        var meta = document.createElement("div"); meta.className = "meta"; meta.textContent = [hit.y, hit.q].filter(Boolean).join(" · ");
+        film.appendChild(a); film.appendChild(meta);
+        setStatus(note, !!note);
+      }, function () {
+        if (my !== ticket) return;
+        setStatus("Couldn't load " + tt + " from IMDb. Re-roll to try another.", true);
+      });
+    });
+  }
+
+  // ---------- wiring ----------
+  function reroll() { drawLeft(); drawRight(); }
+  var t1, t2;
+  itemsEl.addEventListener("input", function () { mem.set("items", itemsEl.value); clearTimeout(t1); t1 = setTimeout(drawLeft, 300); });
+  listsEl.addEventListener("input", function () { mem.set("lists", listsEl.value); clearTimeout(t2); t2 = setTimeout(drawRight, 600); });
+  pickN.addEventListener("input", function () { mem.set("pickN", pickN.value); drawLeft(); });
+  $("reroll").addEventListener("click", reroll);
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target.tagName || "").toLowerCase();
+    if (e.code === "Space" && tag !== "textarea" && tag !== "input" && tag !== "button") { e.preventDefault(); reroll(); }
+  });
+  reroll();
+})();
+</script>
+</body>
+</html>
